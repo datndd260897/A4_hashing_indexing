@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <cstring>
 #include <cmath>
+#include <cctype>
 
 using namespace std;
 
@@ -51,7 +52,7 @@ public:
 class Page {
 public:
     vector<Record> records; // Data_Area containing the records
-    vector<pair<int, int>> slot_directory; // Slot directory containing offset and size of each record
+    vector<pair<int, int> > slot_directory; // Slot directory containing offset and size of each record
     int cur_size = sizeof(int); // Current size of the page including the overflow page pointer. if you also write the length of slot directory change it accordingly.
     int overflowPointerIndex;  // Initially set to -1, indicating the page has no overflow page. 
                                // Update it to the position of the overflow page when one is created.
@@ -65,12 +66,18 @@ public:
     bool insert_record_into_page(Record r) {
         int record_size = r.get_size();
         int slot_size = sizeof(int) * 2;
-        if (cur_size + record_size + slot_size > 4096) { //Check if page size limit exceeded, considering slot directory size
+        int current_slot_directory = slot_directory.size() * sizeof(int);
+        int records_num_size = sizeof(int);
+        int overflow_pointer_size = sizeof(int);
+
+
+        if (cur_size + record_size + slot_size + current_slot_directory + records_num_size + overflow_pointer_size > 4096) { //Check if page size limit exceeded, considering slot directory size
             return false; // Cannot insert the record into this page
         } else {
             records.push_back(r);
-            cur_size += record_size + slot_size; //Updated
              // TO_DO: update slot directory information
+            slot_directory.push_back(make_pair(cur_size, record_size));
+            cur_size += record_size; //Updated
             return true;
         }
     }
@@ -86,6 +93,7 @@ public:
             memcpy(page_data + offset, serialized.c_str(), serialized.size());
             offset += serialized.size();
         }
+
 
         // TODO:
         //  - Write slot_directory in reverse order into page_data buffer.
@@ -126,10 +134,9 @@ private:
 
     // Function to compute hash value for a given ID
     int compute_hash_value(int id) {
-        int hash_value;
-
+        int max_bit_nums = (int) floor(log2(4096));
         // TODO: Implement the hash function h = id mod 2^5.
-        return hash_value;
+        return id & ((1 << max_bit_nums) - 1);
     }
 
     // Function to add a new record to an existing page in the index file
@@ -192,29 +199,79 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         i = 2; // Need 2 bits to address 4 buckets
     }
 
+    bool isHeaderLine(const std::string& line) {
+        string substr = line.substr(0, 2);
+        transform(substr.begin(), substr.end(), substr.begin(), ::toupper);
+        return substr == "ID";  // Extract first 2 characters and compare
+    }
+
     // Function to create hash index from Employee CSV file
-    void createFromFile(string csvFileName) {
-        // Read CSV file and add records to index
-        // Open the CSV file for reading
+    void createFromFile(std::string csvFileName) {
+    // Open the CSV file for reading
         ifstream csvFile(csvFileName);
+        if (!csvFile.is_open()) {
+            cout << "Error: Unable to open CSV file: " << csvFileName << endl;
+            return;
+        }
 
         string line;
-        // Read each line from the CSV file
-        while (getline(csvFile, line)) {
-            // Parse the line and create a Record object
-            stringstream ss(line);
-            string item;
-            vector<string> fields;
-            while (getline(ss, item, ',')) {
-                fields.push_back(item);
+
+        // **Peek at the first line to check if it's a header**
+        if (getline(csvFile, line)) {
+            if (isHeaderLine(line)) {
+                cout << "Detected header, skipping: " << line << endl;
+            } else {
+                csvFile.seekg(0);  // Reset file stream if no header detected
             }
-            Record record(fields);
+        }
 
-            // TODO:
-            //   - Compute hash value for the record's ID using compute_hash_value() function.
-            //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
+        // Read each line from the CSV file
+        while (csvFile.peek() != EOF) {  // Ensure proper handling of multi-line records
+            vector<string> fields;
+            bool insideQuotes = false;
+            ostringstream quotedField;
+            string item;
+
+            try {
+                while (getline(csvFile, line)) {  // Read the entire line
+                    stringstream ss(line);
+                    while (getline(ss, item, ',')) {  // Process CSV fields
+                        if (insideQuotes) {
+                            quotedField << "\n" << item;
+                            if (!item.empty() && item.back() == '"') {  // Closing quote found
+                                fields.push_back(quotedField.str());
+                                insideQuotes = false;
+                            }
+                        } else if (!item.empty() && item.front() == '"' && item.back() != '"') {
+                            quotedField.str("");
+                            quotedField << item;
+                            insideQuotes = true;
+                        } else {
+                            fields.push_back(item);  // Normal field
+                        }
+                    }
+                    if (!insideQuotes) break;  // Stop reading if a complete record is formed
+                }
+
+                if (!fields.empty()) {
+                    // **Try to create a Record object**
+                    try {
+                        Record record(fields);  // Constructor may throw an exception if invalid
+                        int hash_value = compute_hash_value(record.id);
 
 
+                        // TODO:
+                        //   - Compute hash value for the record's ID using compute_hash_value() function.
+                        //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
+
+                    } catch (const std::exception& e) {
+                        cout << "Error creating record: " << e.what() << endl;
+                    }
+                }
+
+            } catch (const exception& e) {
+                cout << "Error processing CSV row: " << e.what() << endl;
+            }
         }
 
         // Close the CSV file
