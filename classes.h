@@ -85,20 +85,33 @@ public:
     // Function to write the page to a binary output stream. 
     void write_into_data_file(ostream &out) const {
         char page_data[4096] = {0}; // Buffer to hold page data
-        int offset = 0;
-
-        // Write records into page_data buffer
-        for (const auto &record: records) {
-            string serialized = record.serialize();
-            memcpy(page_data + offset, serialized.c_str(), serialized.size());
-            offset += serialized.size();
-        }
-
-
+        int offset = 4096;
         // TODO:
         //  - Write slot_directory in reverse order into page_data buffer.
         //  - Write overflowPointerIndex into page_data buffer.
         //  You should write the first entry of the slot_directory, which have the info about the first record at the bottom of the page, before overflowPointerIndex.
+
+        // Write the overflowPointer index
+        offset -= sizeof(overflowPointerIndex);
+        memcpy(page_data + offset, &overflowPointerIndex, sizeof(overflowPointerIndex));
+        // Write the number of slots in directory
+        int num_slots = slot_directory.size();
+        offset -= sizeof(int);
+        memcpy(page_data + offset, &num_slots, sizeof(num_slots));
+
+        // Write slot_directory in reverse order
+        for (const auto &slot: slot_directory) {
+            offset -= sizeof(int) * 2;
+            memcpy(page_data + offset, &slot.first, sizeof(int));
+            memcpy(page_data + offset + sizeof(int), &slot.second, sizeof(int));
+        }
+
+        // Write records into page_data buffer
+        for (const auto &record: records) {
+            string serialized = record.serialize();
+            offset -= serialized.size();
+            memcpy(page_data + offset, serialized.c_str(), serialized.size());
+        }
 
         // Write the page_data buffer to the output stream
         out.write(page_data, sizeof(page_data));
