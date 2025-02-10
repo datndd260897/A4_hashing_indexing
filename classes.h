@@ -21,6 +21,8 @@ public:
         manager_id = stoi(fields[3]);
     }
 
+    Record() {};
+
     // Function to get the size of the record
     int get_size() {
         // sizeof(int) is for name/bio size() in serialize function
