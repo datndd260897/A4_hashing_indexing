@@ -218,6 +218,54 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         return substr == "ID";  // Extract first 2 characters and compare
     }
 
+    vector<string> get_fields(ifstream& csvFile, string& line, bool& insideQuotes, ostringstream& quotedField, string& item) {
+        vector<string> fields;
+        while (getline(csvFile, line)) {
+            // Read the entire line
+            stringstream ss(line);
+            while (getline(ss, item, ',')) {
+                // Process CSV fields
+                if (insideQuotes) {
+                    quotedField << "\n" << item;
+                    if (!item.empty() && item.back() == '"') {
+                        // Closing quote found
+                        fields.push_back(quotedField.str());
+                        insideQuotes = false;
+                    }
+                } else if (!item.empty() && item.front() == '"' && item.back() != '"') {
+                    quotedField.str("");
+                    quotedField << item;
+                    insideQuotes = true;
+                } else {
+                    fields.push_back(item); // Normal field
+                }
+            }
+            if (!insideQuotes) break; // Stop reading if a complete record is formed
+        }
+        return fields;
+    }
+
+    Record create_record(ifstream& csvFile, string& line) {
+        bool insideQuotes = false;
+        ostringstream quotedField;
+        string item;
+        Record result;
+        try {
+            vector<string> fields = get_fields(csvFile, line, insideQuotes, quotedField, item);
+            if (!fields.empty()) {
+                // **Try to create a Record object**
+                try {
+                    result = Record(fields);  // Constructor may throw an exception if invalid
+                } catch (const std::exception& e) {
+                    cout << "Error creating record: " << e.what() << endl;
+                }
+            }
+        } catch (const exception& e) {
+            cout << "Error processing CSV row: " << e.what() << endl;
+        }
+        return result;
+    }
+
     // Function to create hash index from Employee CSV file
     void createFromFile(std::string csvFileName) {
     // Open the CSV file for reading
@@ -240,51 +288,11 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
 
         // Read each line from the CSV file
         while (csvFile.peek() != EOF) {  // Ensure proper handling of multi-line records
-            vector<string> fields;
-            bool insideQuotes = false;
-            ostringstream quotedField;
-            string item;
-
-            try {
-                while (getline(csvFile, line)) {  // Read the entire line
-                    stringstream ss(line);
-                    while (getline(ss, item, ',')) {  // Process CSV fields
-                        if (insideQuotes) {
-                            quotedField << "\n" << item;
-                            if (!item.empty() && item.back() == '"') {  // Closing quote found
-                                fields.push_back(quotedField.str());
-                                insideQuotes = false;
-                            }
-                        } else if (!item.empty() && item.front() == '"' && item.back() != '"') {
-                            quotedField.str("");
-                            quotedField << item;
-                            insideQuotes = true;
-                        } else {
-                            fields.push_back(item);  // Normal field
-                        }
-                    }
-                    if (!insideQuotes) break;  // Stop reading if a complete record is formed
-                }
-
-                if (!fields.empty()) {
-                    // **Try to create a Record object**
-                    try {
-                        Record record(fields);  // Constructor may throw an exception if invalid
-                        int hash_value = compute_hash_value(record.id);
-
-
-                        // TODO:
-                        //   - Compute hash value for the record's ID using compute_hash_value() function.
-                        //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
-
-                    } catch (const std::exception& e) {
-                        cout << "Error creating record: " << e.what() << endl;
-                    }
-                }
-
-            } catch (const exception& e) {
-                cout << "Error processing CSV row: " << e.what() << endl;
-            }
+            Record record = create_record(csvFile, line);
+            // TODO:
+            //   - Compute hash value for the record's ID using compute_hash_value() function.
+            //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
+            int page_index = compute_hash_value(record.id) % n;
         }
 
         // Close the CSV file
