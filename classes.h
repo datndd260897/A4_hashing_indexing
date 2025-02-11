@@ -440,8 +440,6 @@ private:
             cerr << "Error: Employee with Id.: "<<id<< "Not found in page or overflow" << endl;
         }
 
-
-
         // TODO:
         //  - Search for the record by ID in the page
         //  - Check for overflow pages and report if record with given ID is not found
@@ -452,13 +450,6 @@ public:
 LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         n = 4; // Start with 4 buckets in index
         i = 2; // Need 2 bits to address 4 buckets
-        if (std::ifstream(fileName)) {  // Check if file exists
-            if (remove(fileName.c_str()) == 0) {
-                std::cout << "Deleted existing file: " << fileName << std::endl;
-            } else {
-                std::cerr << "Error deleting file: " << fileName << std::endl;
-            }
-        }
     }
 
     bool isHeaderLine(const std::string& line) {
@@ -517,7 +508,7 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
 
     // Function to create hash index from Employee CSV file
     void createFromFile(std::string csvFileName) {
-    // Open the CSV file for reading
+        // Open the CSV file for reading
         ifstream csvFile(csvFileName);
         if (!csvFile.is_open()) {
             cout << "Error: Unable to open CSV file: " << csvFileName << endl;
@@ -548,6 +539,10 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
             }
             addRecordToIndex(page_index, page, record);
         }
+        // Write the last record to page
+        string i_file_name = fileName + to_string(i) + ".dat";
+        fstream indexFile(i_file_name, ios::binary | ios::in | ios::out);
+        page.write_into_data_file(indexFile);
         // Close the CSV file
         csvFile.close();
     }
@@ -563,10 +558,6 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         }
         Record record;
         searchRecordByIdInPage(pageIndex, id); //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
-        if (record.id == id) {
-          record.print();
-        }
-
         // Close the index file
         indexFile.close();
     }

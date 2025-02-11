@@ -4,14 +4,24 @@
 #include <stdexcept>
 #include "classes.h"
 
-using namespace std;
 
+
+void removeExistingFiles() {
+    for (int i = 1; i <= 12; ++i) {
+        std::string filename = "EmployeeIndex" + std::to_string(i) + ".dat";
+        if (std::FILE *file = std::fopen(filename.c_str(), "r")) {
+            std::fclose(file);
+            std::remove(filename.c_str());
+        }
+    }
+}
 
 int main(int argc, char* const argv[]) {
+    removeExistingFiles();
 
     // Create the index
     LinearHashIndex hashIndex("EmployeeIndex");
-    hashIndex.createFromFile("Employee (1).csv");
+    hashIndex.createFromFile("Employee.csv");
 
     for (int i = 1; i < argc; ++i) {
         int searchId = stoi(argv[i]);
