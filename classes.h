@@ -267,7 +267,7 @@ private:
     }
 
     // Function to add a new record to an existing page in the index file
-    void addRecordToIndex(int pageIndex, Page &page, Record &record) {
+    void addRecordToIndex(int pageIndex, Page &page, Record &record, bool isRehashing = false) {
         string i_file_name = fileName + to_string(i) + ".dat";
         // Open index file in binary mode for updating
         fstream indexFile(i_file_name, ios::binary | ios::in | ios::out);
@@ -316,7 +316,6 @@ private:
             }
         }
 
-
         if (!indexFile) {
             cerr << "Error: Unable to open index file for adding record." << endl;
             return;
@@ -325,105 +324,29 @@ private:
 
         numRecords++;
         // Check and Take neccessary steps if capacity is reached:
-        OverflowHandler(indexFile, record);
+        if (!isRehashing) {
+            OverflowHandler(indexFile, record);
+        }
 		// increase n; increase i (if necessary); place records in the new bucket that may have been originally misplaced due to a bit flip
-
 
         // Close the index file
         indexFile.close();
     }
 
-    // void relocateBitFlippedRecords() {
-    //     fstream indexFile(fileName, ios::binary | ios::in | ios::out);
-    //     if (!indexFile) {
-    //         cerr << "Error: Unable to open index file for bit-flip correction." << endl;
-    //         return;
-    //     }
-    //
-    //     int old_bucket = flipFirstBit(n - 1);  // Compute the old location
-    //     Page page;
-    //     if (!page.read_from_data_file(indexFile, old_bucket)) return;
-    //
-    //     vector<Record> misplacedRecords;
-    //
-    //     // Extract misplaced records
-    //     for (auto it = page.records.begin(); it != page.records.end();) {
-    //         int correct_bucket = compute_hash_value(it->id) % (1 << i);
-    //         if (correct_bucket == n - 1) {
-    //             misplacedRecords.push_back(*it);
-    //             it = page.records.erase(it);  // Remove record from the old bucket
-    //         } else {
-    //             ++it;
-    //         }
-    //     }
-    //
-    //     // Update the old bucket in the index file
-    //     page.write_into_data_file(indexFile);
-    //
-    //     // Insert misplaced records into the correct bucket
-    //     Page newPage;
-    //     for (Record &rec : misplacedRecords) {
-    //         addRecordToIndex(n - 1, newPage, rec);
-    //     }
-    //
-    //     indexFile.close();
-    // }
-
-    // void rehashRecords() {
-    //     string tempFileName = "TempEmployeeIndex.dat";
-    //     fstream oldFile(fileName, ios::binary | ios::in);
-    //     fstream newFile(tempFileName, ios::binary | ios::out | ios::trunc);
-    //
-    //     if (!oldFile || !newFile) {
-    //         cerr << "Error: Unable to open files for rehashing." << endl;
-    //         return;
-    //     }
-    //
-    //     Page page;
-    //     vector<Record> allRecords;
-    //
-    //     // Read all records from the old index file
-    //     for (int pageIndex = 0; pageIndex < n; pageIndex++) {
-    //         if (!page.read_from_data_file(oldFile, pageIndex)) continue;
-    //
-    //         for (Record &rec : page.records) {
-    //             allRecords.push_back(rec);
-    //         }
-    //     }
-    //
-    //     // Reset index structure
-    //     n = (1 << i);  // Set n = 2^i
-    //     numRecords = 0;
-    //     Page newPage;
-    //
-    //     // Insert all records into the new index
-    //     for (Record &rec : allRecords) {
-    //         int newPageIndex = compute_hash_value(rec.id) % (1 << i);
-    //         addRecordToIndex(newPageIndex, newPage, rec);
-    //     }
-    //
-    //     oldFile.close();
-    //     newFile.close();
-    //
-    //     // Replace old index file with new file
-    //     remove(fileName.c_str());
-    //     rename(tempFileName.c_str(), fileName.c_str());
-    // }
-
     void rehashRecords(fstream &indexFile) {
         indexFile.seekg(0, ios::beg); // Rewind the data_file to the beginning for reading
         int page_number = 0;
         Page page;
+        Page insert_page;
         while (page.read_from_data_file(indexFile, page_number)) {
             // Now process the current page using the slot directory to find the desired id
             // Process logic goes here
             for (Record& record: page.records) {
                 int page_index = compute_hash_value(record.id) % (int)pow(2, i);
-                if (page_index > n) {
+                if (page_index > n - 1) {
                     page_index = flipFirstBit(page_index);
                 }
-                Page insert_page = Page();
-                addRecordToIndex(page_index, insert_page, record);
+                addRecordToIndex(page_index, insert_page, record, true);
             }
             page_number++;
             if (indexFile.eof()) {
@@ -432,6 +355,36 @@ private:
         }
     }
 
+    void relocateBitFlippedRecords(fstream &indexFile) {
+        int oldBucket = flipFirstBit(n - 1); // Bucket affected by bit flip
+
+        Page oldPage;
+        if (!oldPage.read_from_data_file(indexFile, oldBucket)) {
+            return;  // No data in the old bucket
+        }
+
+        Page newPage;
+        vector<Record> toReinsert;
+        vector<Record> retained;
+
+        // Separate records into those that should stay and those to be moved
+        for (const auto &record : oldPage.records) {
+            int newBucket = compute_hash_value(record.id) % (1 << i);
+            if (newBucket == n - 1) {
+                toReinsert.push_back(record);
+            } else {
+                retained.push_back(record);
+            }
+        }
+
+        // If there are records to be moved, reinsert them in the correct bucket
+        if (!toReinsert.empty()) {
+            for (auto &record : toReinsert) {
+                addRecordToIndex(n - 1, newPage, record, true);
+            }
+            newPage.write_into_data_file(indexFile);
+        }
+    }
 
 
     void OverflowHandler(fstream &indexFile, Record &record) {
@@ -445,7 +398,7 @@ private:
                 i++;
                 rehashRecords(indexFile);  // Full rehash and redistribution
             } else {
-                // relocateBitFlippedRecords();  // Only fix misplaced records
+                relocateBitFlippedRecords(indexFile);  // Only fix misplaced records
             }
         }
     }
@@ -563,12 +516,11 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
             //   - Compute hash value for the record's ID using compute_hash_value() function.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
             int page_index = compute_hash_value(record.id) % (int)pow(2, i);
-            if (page_index > n) {
+            if (page_index > n-1) {
                 page_index = flipFirstBit(page_index);
             }
             addRecordToIndex(page_index, page, record);
         }
-
         // Close the CSV file
         csvFile.close();
     }
