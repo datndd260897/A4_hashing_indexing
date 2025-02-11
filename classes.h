@@ -480,7 +480,7 @@ private:
               break;
             }
 
-            if (page.overflowPointerIndex != -1) {
+            if (page.overflowPointerIndex == -1) {
               break;
             }
             else{
