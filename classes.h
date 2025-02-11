@@ -451,7 +451,7 @@ private:
     }
 
     // Function to search for a record by ID in a given page of the index file
-    void searchRecordByIdInPage(int pageIndex, int id) {
+    void searchRecordByIdInPage(int pageIndex, int id, Record &record) {
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
         if (!indexFile) {
@@ -610,11 +610,16 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         ifstream indexFile(fileName, ios::binary | ios::in);
 
         // TODO:
-        //  - Compute hash value for the given ID using compute_hash_value() function
-        //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
-        int bucket = compute_hash_value(id) % (int)pow(2, i);
+
+
+        int pageIndex = compute_hash_value(id) % (int)pow(2, i); //  - Compute hash value for the given ID using compute_hash_value() function
         if (bucket > n) {
           bucket = flipFirstBit(bucket);
+        }
+        Record record;
+        searchRecordByIdInPage(bucket, id, record); //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
+        if (record.id == id) {
+          record.print();
         }
 
         // Close the index file
