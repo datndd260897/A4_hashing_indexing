@@ -10,8 +10,8 @@ using namespace std;
 int main() {
 
     // Create the index
-    LinearHashIndex hashIndex("EmployeeIndex");
-    hashIndex.createFromFile("Employee.csv");
+    LinearHashIndex hashIndex("EmployeeIndex.dat");
+    hashIndex.createFromFile("Employee (1).csv");
 
 
     // TODO: You'll receive employee IDs as arguments, process them to retrieve the record, or display a message if not found. 
