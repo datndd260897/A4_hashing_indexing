@@ -406,20 +406,47 @@ private:
     // Function to search for a record by ID in a given page of the index file
     void searchRecordByIdInPage(int pageIndex, int id) {
         // Open index file in binary mode for reading
-        ifstream indexFile(fileName, ios::binary | ios::in);
+        ifstream indexFile("EmployeeIndex12.dat", ios::binary | ios::in);
+        if (!indexFile) {
+            cerr << "Error: Unable to open index file." << endl;
+            return;
+        }
+        bool found = false;
+        while (true) {
+            // Seek to the appropriate position in the index file
+            //indexFile.seekg(pageIndex * Page_SIZE, ios::beg); in read+from_file
 
-        // Seek to the appropriate position in the index file
-        indexFile.seekg(pageIndex * Page_SIZE, ios::beg);
+            // Read the page from the index file
+            Page page;
+            page.read_from_data_file(indexFile, pageIndex);
+            for (Record& record: page.records) {
+                if (record.id == id) {
+                    found = true;
+                    record.print();
+                    return;}
+            }
+            if (found){
+                break;
+            }
 
-        // Read the page from the index file
-        Page page;
+            if (page.overflowPointerIndex == -1) {
+                break;
+            }
+            else{
+                pageIndex=page.overflowPointerIndex;
+            }
+        }
+        if (!found){
+            cerr << "Error: Employee with Id.: "<<id<< "Not found in page or overflow" << endl;
+        }
 
-        // page.read_from_data_file(indexFile);
+
 
         // TODO:
         //  - Search for the record by ID in the page
         //  - Check for overflow pages and report if record with given ID is not found
     }
+
 
 public:
 LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
@@ -525,14 +552,20 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         csvFile.close();
     }
 
-    // Function to search for a record by ID in the hash index
     void findAndPrintEmployee(int id) {
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
-
         // TODO:
-        //  - Compute hash value for the given ID using compute_hash_value() function
-        //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
+
+        int pageIndex = compute_hash_value(id) % (int)pow(2, i); //  - Compute hash value for the given ID using compute_hash_value() function
+        if (pageIndex > n-1) {
+          pageIndex = flipFirstBit(pageIndex);
+        }
+        Record record;
+        searchRecordByIdInPage(pageIndex, id); //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
+        if (record.id == id) {
+          record.print();
+        }
 
         // Close the index file
         indexFile.close();
