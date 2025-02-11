@@ -162,6 +162,12 @@ public:
         out.flush();
     }
 
+    void clear() {
+        records.clear();
+        slot_directory.clear();
+        cur_size = 0;
+    }
+
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
     bool read_from_data_file(istream &in, size_t page_position) {
         // Read all the records and slot_directory information from your .dat file
@@ -178,9 +184,9 @@ public:
             // Reconstruct the slot directory
             // Start rebuilding the slot_directory from the bottom of the page
             int dir_offset = 4096;
+            p_index = page_position;
 
-            slot_directory.clear();
-            records.clear();
+            clear();
             // Read the overflowpointer
             dir_offset -= sizeof(int);
             int overflow_pointer;
@@ -217,6 +223,7 @@ public:
                 Record r;
                 r.deserialize(record_string);
                 records.push_back(r);
+                cur_size += record_size;
             }
 
             return true;
@@ -287,24 +294,27 @@ private:
 
         // After staying at the correct index page
         // Insert record to the index page
-        while (!page.insert_record_into_page(record)) {
+        if (!page.insert_record_into_page(record)) {
             // If page is dirty Go to the last overflow_page
             page.write_into_data_file(indexFile);
             // Move to last overflowpage
             while (page.overflowPointerIndex != -1) {
-                page.p_index = page.overflowPointerIndex;
-                page.read_from_data_file(indexFile, page.p_index);
+                page.read_from_data_file(indexFile, page.overflowPointerIndex);
             }
+
             if (!page.insert_record_into_page(record)) {
                 // current page or overflow page is full
                 int overflow_pointer_index = pow(2, i) + over_flow_page_num;
-                // set overflow pointer to the overflow region
                 page.overflowPointerIndex = overflow_pointer_index;
+                page.write_into_data_file(indexFile);
+                // set overflow pointer to the overflow region
                 page = Page();
                 page.p_index = overflow_pointer_index;
                 over_flow_page_num ++;
+                page.insert_record_into_page(record);
             }
         }
+
 
         if (!indexFile) {
             cerr << "Error: Unable to open index file for adding record." << endl;
@@ -328,16 +338,20 @@ private:
     }
 
     void OverflowHandler() {
-        // float avg_records_per_page = (float) numRecords / n;
-        // if (avg_records_per_page > 0.7) {
-        //     n++;
-        //     if (n > (1 << i)) i++;
-        // }
         // TODO:
         // Calculate the average number of records per page
+        float avg_records_per_page = (float) numRecords * 700 / (n * 4096);
+        if (avg_records_per_page > 0.7) {
+            // Take neccessary steps if capacity is reached
+            // increase n; increase i (if necessary); redistribute records accordingly.
+            // place records in the new bucket that may have been originally misplaced due to a bit flip.
+            n++;
+            if (n > (1 << i)) {
+                i++;
+            }else {
 
-        // Take neccessary steps if capacity is reached
-        // increase n; increase i (if necessary); redistribute records accordingly. place records in the new bucket that may have been originally misplaced due to a bit flip.
+            }
+        }
     }
 
     // Function to search for a record by ID in a given page of the index file
