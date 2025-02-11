@@ -10,7 +10,7 @@ using namespace std;
 int main() {
 
     // Create the index
-    LinearHashIndex hashIndex("EmployeeIndex.dat");
+    LinearHashIndex hashIndex("EmployeeIndex");
     hashIndex.createFromFile("Employee (1).csv");
 
 
