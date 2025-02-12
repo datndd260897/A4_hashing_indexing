@@ -97,7 +97,6 @@ public:
     int p_index = -1;
 
 
-
     // Constructor
     Page() : overflowPointerIndex(-1) {
         cur_size = 0;
@@ -170,6 +169,9 @@ public:
 
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
     bool read_from_data_file(istream &in, size_t page_position) {
+        if (page_position == -1) {
+            return false;
+        }
         // Read all the records and slot_directory information from your .dat file
         // Remember you are reading a chunk of 4098 byte / 4 KB from the data file to your main memory.
         char page_data[4096] = {0};
@@ -254,6 +256,7 @@ private:
     string fileName;
     const int RECORD_SIZE = 708;
     int over_flow_page_num = 0;
+    long total_records_length = 0;
 
     // Function to compute hash value for a given ID
     int compute_hash_value(int id) {
@@ -268,12 +271,11 @@ private:
 
     // Function to add a new record to an existing page in the index file
     void addRecordToIndex(int pageIndex, Page &page, Record &record, bool isRehashing = false) {
-        string i_file_name = fileName + to_string(i) + ".dat";
         // Open index file in binary mode for updating
-        fstream indexFile(i_file_name, ios::binary | ios::in | ios::out);
+        fstream indexFile(fileName, ios::binary | ios::in | ios::out);
         if (!indexFile) {
             // If the file does not exist, create it
-            indexFile.open(i_file_name, ios::binary | ios::in | ios::out | ios::trunc);
+            indexFile.open(fileName, ios::binary | ios::in | ios::out | ios::trunc);
         }
 
         // TODO:
@@ -292,7 +294,6 @@ private:
             }
             page.p_index = pageIndex; // Ensure page index is correctly set
         }
-
         // After staying at the correct index page
         // Insert record to the index page
         if (!page.insert_record_into_page(record)) {
@@ -305,7 +306,7 @@ private:
 
             if (!page.insert_record_into_page(record)) {
                 // current page or overflow page is full
-                int overflow_pointer_index = pow(2, i) + over_flow_page_num;
+                int overflow_pointer_index = pow(2, 12) + over_flow_page_num;
                 page.overflowPointerIndex = overflow_pointer_index;
                 page.write_into_data_file(indexFile);
                 // set overflow pointer to the overflow region
@@ -323,6 +324,7 @@ private:
 
 
         numRecords++;
+        total_records_length += record.get_size();
         // Check and Take neccessary steps if capacity is reached:
         if (!isRehashing) {
             OverflowHandler(indexFile, record);
@@ -357,25 +359,22 @@ private:
 
     void relocateBitFlippedRecords(fstream &indexFile) {
         int oldBucket = flipFirstBit(n - 1); // Bucket affected by bit flip
-
         Page oldPage;
-        if (!oldPage.read_from_data_file(indexFile, oldBucket)) {
-            return;  // No data in the old bucket
-        }
-
         Page newPage;
         vector<Record> toReinsert;
         vector<Record> retained;
-
-        // Separate records into those that should stay and those to be moved
-        for (const auto &record : oldPage.records) {
-            int newBucket = compute_hash_value(record.id) % (1 << i);
-            if (newBucket == n - 1) {
-                toReinsert.push_back(record);
-            } else {
-                retained.push_back(record);
+        while (oldPage.read_from_data_file(indexFile, oldBucket)) {
+            for (const auto &record : oldPage.records) {
+                int newBucket = compute_hash_value(record.id) % (1 << i);
+                if (newBucket == n - 1) {
+                    toReinsert.push_back(record);
+                } else {
+                    retained.push_back(record);
+                }
             }
+            oldBucket = oldPage.overflowPointerIndex;
         }
+        // Separate records into those that should stay and those to be moved
 
         // If there are records to be moved, reinsert them in the correct bucket
         if (!toReinsert.empty()) {
@@ -389,24 +388,30 @@ private:
 
     void OverflowHandler(fstream &indexFile, Record &record) {
         // Compute average records per page
-        float avg_records_per_page = (float) numRecords * record.get_size() / (n * PAGE_SIZE);
+        float avg_rec_size = (total_records_length / numRecords) ;
+        float total_page_size = n * PAGE_SIZE;
+        float avg_records_per_page = (avg_rec_size * numRecords) / total_page_size;
         // Check if expansion is needed
-        if (avg_records_per_page > 0.7 && i < 12) {
+        if (avg_records_per_page > 0.7 && n < 4096) {
             // Increase number of buckets
             n++;
-            if (n > (1 << i)) {  // If n exceeds 2^i, increase i and rehash
+            if (n > (1 << i)) {
                 i++;
-                rehashRecords(indexFile);  // Full rehash and redistribution
-            } else {
-                relocateBitFlippedRecords(indexFile);  // Only fix misplaced records
             }
+            relocateBitFlippedRecords(indexFile);
+            // if (n > (1 << i)) {  // If n exceeds 2^i, increase i and rehash
+            //     i++;
+            //     rehashRecords(indexFile);  // Full rehash and redistribution
+            // } else {
+            //     relocateBitFlippedRecords(indexFile);  // Only fix misplaced records
+            // }
         }
     }
 
     // Function to search for a record by ID in a given page of the index file
     void searchRecordByIdInPage(int pageIndex, int id) {
         // Open index file in binary mode for reading
-        ifstream indexFile("EmployeeIndex12.dat", ios::binary | ios::in);
+        ifstream indexFile(fileName, ios::binary | ios::in);
         if (!indexFile) {
             cerr << "Error: Unable to open index file." << endl;
             return;
@@ -540,9 +545,9 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
             addRecordToIndex(page_index, page, record);
         }
         // Write the last record to page
-        string i_file_name = fileName + to_string(i) + ".dat";
-        fstream indexFile(i_file_name, ios::binary | ios::in | ios::out);
+        fstream indexFile(fileName, ios::binary | ios::in | ios::out);
         page.write_into_data_file(indexFile);
+        cout << "Number of n: " << n << endl;
         // Close the CSV file
         csvFile.close();
     }
