@@ -257,6 +257,7 @@ private:
     const int RECORD_SIZE = 708;
     int over_flow_page_num = 0;
     long total_records_length = 0;
+    int num_page = 0;
 
     // Function to compute hash value for a given ID
     int compute_hash_value(int id) {
@@ -291,6 +292,7 @@ private:
             // Read the new page to buffer and add record into it
             if (!page.read_from_data_file(indexFile, pageIndex)) {
                 page = Page(); // Initialize the page
+                num_page++;
             }
             page.p_index = pageIndex; // Ensure page index is correctly set
         }
@@ -311,6 +313,7 @@ private:
                 page.write_into_data_file(indexFile);
                 // set overflow pointer to the overflow region
                 page = Page();
+                num_page++;
                 page.p_index = overflow_pointer_index;
                 over_flow_page_num ++;
                 page.insert_record_into_page(record);
@@ -359,12 +362,12 @@ private:
 
     void relocateBitFlippedRecords(fstream &indexFile) {
         int oldBucket = flipFirstBit(n - 1); // Bucket affected by bit flip
-        Page oldPage;
-        Page newPage;
+        Page page;
         vector<Record> toReinsert;
         vector<Record> retained;
-        while (oldPage.read_from_data_file(indexFile, oldBucket)) {
-            for (const auto &record : oldPage.records) {
+        int currentBucketPointer = oldBucket;
+        while (page.read_from_data_file(indexFile, currentBucketPointer)) {
+            for (const auto &record : page.records) {
                 int newBucket = compute_hash_value(record.id) % (1 << i);
                 if (newBucket == n - 1) {
                     toReinsert.push_back(record);
@@ -372,16 +375,24 @@ private:
                     retained.push_back(record);
                 }
             }
-            oldBucket = oldPage.overflowPointerIndex;
+            if (!retained.empty()) {
+                page.clear();
+                page.p_index = currentBucketPointer;
+                for (Record &record : retained) {
+                    page.insert_record_into_page(record);
+                }
+                page.write_into_data_file(indexFile);
+            }
+            currentBucketPointer = page.overflowPointerIndex;
         }
         // Separate records into those that should stay and those to be moved
-
+        page = Page();
         // If there are records to be moved, reinsert them in the correct bucket
         if (!toReinsert.empty()) {
             for (auto &record : toReinsert) {
-                addRecordToIndex(n - 1, newPage, record, true);
+                addRecordToIndex(n - 1, page, record, true);
             }
-            newPage.write_into_data_file(indexFile);
+            page.write_into_data_file(indexFile);
         }
     }
 
@@ -548,6 +559,7 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         fstream indexFile(fileName, ios::binary | ios::in | ios::out);
         page.write_into_data_file(indexFile);
         cout << "Number of n: " << n << endl;
+        cout << "Number of page: " << num_page << endl;
         // Close the CSV file
         csvFile.close();
     }
