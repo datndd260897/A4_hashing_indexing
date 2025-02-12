@@ -254,7 +254,6 @@ private:
     int i;	// The number of least-significant-bits of h(id) to check. Will need to increase i once n > 2^i
     int numRecords;    // Records currently in index. Used to test whether to increase n
     string fileName;
-    const int RECORD_SIZE = 708;
     int over_flow_page_num = 0;
     long total_records_length = 0;
     int num_page = 0;
@@ -338,28 +337,6 @@ private:
         indexFile.close();
     }
 
-    void rehashRecords(fstream &indexFile) {
-        indexFile.seekg(0, ios::beg); // Rewind the data_file to the beginning for reading
-        int page_number = 0;
-        Page page;
-        Page insert_page;
-        while (page.read_from_data_file(indexFile, page_number)) {
-            // Now process the current page using the slot directory to find the desired id
-            // Process logic goes here
-            for (Record& record: page.records) {
-                int page_index = compute_hash_value(record.id) % (int)pow(2, i);
-                if (page_index > n - 1) {
-                    page_index = flipFirstBit(page_index);
-                }
-                addRecordToIndex(page_index, insert_page, record, true);
-            }
-            page_number++;
-            if (indexFile.eof()) {
-                break;
-            }
-        }
-    }
-
     void relocateBitFlippedRecords(fstream &indexFile) {
         int oldBucket = flipFirstBit(n - 1); // Bucket affected by bit flip
         Page page;
@@ -410,12 +387,6 @@ private:
                 i++;
             }
             relocateBitFlippedRecords(indexFile);
-            // if (n > (1 << i)) {  // If n exceeds 2^i, increase i and rehash
-            //     i++;
-            //     rehashRecords(indexFile);  // Full rehash and redistribution
-            // } else {
-            //     relocateBitFlippedRecords(indexFile);  // Only fix misplaced records
-            // }
         }
     }
 
