@@ -257,6 +257,7 @@ private:
     int over_flow_page_num = 0;
     long total_records_length = 0;
     int num_page = 0;
+    // vector<Page> buffer;
 
     // Function to compute hash value for a given ID
     int compute_hash_value(int id) {
@@ -323,14 +324,12 @@ private:
             cerr << "Error: Unable to open index file for adding record." << endl;
             return;
         }
-
-
-        numRecords++;
-        total_records_length += record.get_size();
         // Check and Take neccessary steps if capacity is reached:
         if (!isRehashing) {
-            OverflowHandler(indexFile, record);
+            numRecords++;
+            total_records_length += record.get_size();
         }
+        OverflowHandler(indexFile);
 		// increase n; increase i (if necessary); place records in the new bucket that may have been originally misplaced due to a bit flip
 
         // Close the index file
@@ -352,7 +351,7 @@ private:
                     retained.push_back(record);
                 }
             }
-            if (!retained.empty()) {
+            if (!toReinsert.empty()) {
                 page.clear();
                 page.p_index = currentBucketPointer;
                 for (Record &record : retained) {
@@ -374,7 +373,7 @@ private:
     }
 
 
-    void OverflowHandler(fstream &indexFile, Record &record) {
+    void OverflowHandler(fstream &indexFile) {
         // Compute average records per page
         float avg_rec_size = (total_records_length / numRecords) ;
         float total_page_size = n * PAGE_SIZE;
@@ -437,6 +436,11 @@ public:
 LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         n = 4; // Start with 4 buckets in index
         i = 2; // Need 2 bits to address 4 buckets
+    }
+    void print() {
+        cout << "Number of n: " << n << endl;
+        cout << "Number of page: " << num_page << endl;
+        cout << "Number of Records: " << numRecords << endl;
     }
 
     bool isHeaderLine(const std::string& line) {
@@ -529,8 +533,7 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         // Write the last record to page
         fstream indexFile(fileName, ios::binary | ios::in | ios::out);
         page.write_into_data_file(indexFile);
-        cout << "Number of n: " << n << endl;
-        cout << "Number of page: " << num_page << endl;
+
         // Close the CSV file
         csvFile.close();
     }

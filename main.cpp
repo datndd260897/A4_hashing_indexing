@@ -32,6 +32,6 @@ int main(int argc, char* const argv[]) {
 
     // Print execution time
     cout << "\nExecution Time: " << duration.count() << " ms\n";
-
+    hashIndex.print();
     return 0;
 }
