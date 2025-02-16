@@ -169,6 +169,7 @@ public:
 
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
     bool read_from_data_file(istream &in, size_t page_position) {
+        clear();
         if (page_position == -1) {
             return false;
         }
@@ -257,13 +258,18 @@ private:
     int over_flow_page_num = 0;
     long total_records_length = 0;
     int num_page = 0;
-    // vector<Page> buffer;
+    Page buffer_page;
 
     // Function to compute hash value for a given ID
     int compute_hash_value(int id) {
         int max_bit_nums = (int) floor(log2(4096));
         // TODO: Implement the hash function h = id mod 2^5.
-        return id & ((1 << max_bit_nums) - 1);
+        int hash_value = id & ((1 << max_bit_nums) - 1);
+        hash_value = hash_value & ((1 << i) - 1);
+        if (hash_value > n-1) {
+            hash_value = flipFirstBit(hash_value);
+        }
+        return hash_value;
     }
 
     int flipFirstBit(int value) {
@@ -338,37 +344,43 @@ private:
 
     void relocateBitFlippedRecords(fstream &indexFile) {
         int oldBucket = flipFirstBit(n - 1); // Bucket affected by bit flip
-        Page page;
         vector<Record> toReinsert;
         vector<Record> retained;
         int currentBucketPointer = oldBucket;
-        while (page.read_from_data_file(indexFile, currentBucketPointer)) {
-            for (const auto &record : page.records) {
-                int newBucket = compute_hash_value(record.id) % (1 << i);
+        // Read old bucket from index file
+        while (buffer_page.read_from_data_file(indexFile, currentBucketPointer)) {
+            for (const auto &record : buffer_page.records) {
+                // get new hash value
+                int newBucket = compute_hash_value(record.id);
                 if (newBucket == n - 1) {
+                    // if it belongs to new bucket, insert to reinsert
                     toReinsert.push_back(record);
                 } else {
                     retained.push_back(record);
                 }
             }
-            if (!toReinsert.empty()) {
-                page.clear();
-                page.p_index = currentBucketPointer;
+            if (!retained.empty()) {
+                // if there are bitfliped records => Remove it out of the Page
+                // Clear the current page
+                // Reinsert retained records into this page and write it back
+                buffer_page.clear();
+                buffer_page.p_index = currentBucketPointer;
                 for (Record &record : retained) {
-                    page.insert_record_into_page(record);
+                    buffer_page.insert_record_into_page(record);
                 }
-                page.write_into_data_file(indexFile);
+                buffer_page.write_into_data_file(indexFile);
+                retained.clear();
             }
-            currentBucketPointer = page.overflowPointerIndex;
+            currentBucketPointer = buffer_page.overflowPointerIndex;
         }
         // Separate records into those that should stay and those to be moved
-        page = Page();
         // If there are records to be moved, reinsert them in the correct bucket
+        buffer_page = Page();
         if (!toReinsert.empty()) {
             for (auto &record : toReinsert) {
-                addRecordToIndex(n - 1, page, record, true);
+                addRecordToIndex(n - 1, buffer_page, record, true);
             }
-            page.write_into_data_file(indexFile);
+            buffer_page.write_into_data_file(indexFile);
         }
     }
 
@@ -385,6 +397,8 @@ private:
             if (n > (1 << i)) {
                 i++;
             }
+            // Write current page to the .dat to implement relocate bit flipped records
+            buffer_page.write_into_data_file(indexFile);
             relocateBitFlippedRecords(indexFile);
         }
     }
@@ -409,21 +423,22 @@ private:
                 if (record.id == id) {
                     found = true;
                     record.print();
-                    return;}
+                    break;
+                }
             }
             if (found){
                 break;
             }
 
-            if (page.overflowPointerIndex == -1) {
-                break;
+            if (page.overflowPointerIndex != -1) {
+                pageIndex=page.overflowPointerIndex;
             }
             else{
-                pageIndex=page.overflowPointerIndex;
+                break;
             }
         }
         if (!found){
-            cerr << "Error: Employee with Id.: "<<id<< "Not found in page or overflow" << endl;
+            cout << " Not found in page or overflow" << endl;
         }
 
         // TODO:
@@ -524,15 +539,12 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
             // TODO:
             //   - Compute hash value for the record's ID using compute_hash_value() function.
             //   - Insert the record into the appropriate page in the index file using addRecordToIndex() function.
-            int page_index = compute_hash_value(record.id) % (int)pow(2, i);
-            if (page_index > n-1) {
-                page_index = flipFirstBit(page_index);
-            }
-            addRecordToIndex(page_index, page, record);
+            int page_index = compute_hash_value(record.id);
+            addRecordToIndex(page_index, buffer_page, record);
         }
         // Write the last record to page
         fstream indexFile(fileName, ios::binary | ios::in | ios::out);
-        page.write_into_data_file(indexFile);
+        buffer_page.write_into_data_file(indexFile);
 
         // Close the CSV file
         csvFile.close();
@@ -542,12 +554,7 @@ LinearHashIndex(string indexFileName) : numRecords(0), fileName(indexFileName) {
         // Open index file in binary mode for reading
         ifstream indexFile(fileName, ios::binary | ios::in);
         // TODO:
-
-        int pageIndex = compute_hash_value(id) % (int)pow(2, i); //  - Compute hash value for the given ID using compute_hash_value() function
-        if (pageIndex > n-1) {
-          pageIndex = flipFirstBit(pageIndex);
-        }
-        Record record;
+        int pageIndex = compute_hash_value(id); //  - Compute hash value for the given ID using compute_hash_value() function
         searchRecordByIdInPage(pageIndex, id); //  - Search for the record in the page corresponding to the hash value using searchRecordByIdInPage() function
         // Close the index file
         indexFile.close();
