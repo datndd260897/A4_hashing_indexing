@@ -418,9 +418,8 @@ private:
             //indexFile.seekg(pageIndex * Page_SIZE, ios::beg); in read+from_file
 
             // Read the page from the index file
-            Page page;
-            page.read_from_data_file(indexFile, pageIndex);
-            for (Record& record: page.records) {
+            buffer_page.read_from_data_file(indexFile, pageIndex);
+            for (Record& record: buffer_page.records) {
                 if (record.id == id) {
                     found = true;
                     record.print();
@@ -431,8 +430,8 @@ private:
                 break;
             }
 
-            if (page.overflowPointerIndex != -1) {
-                pageIndex=page.overflowPointerIndex;
+            if (buffer_page.overflowPointerIndex != -1) {
+                pageIndex=buffer_page.overflowPointerIndex;
             }
             else{
                 break;
