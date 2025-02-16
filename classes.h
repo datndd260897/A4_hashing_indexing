@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cmath>
 #include <cctype>
+#include <algorithm>
 
 using namespace std;
 
